@@ -1,0 +1,559 @@
+
+
+###Libraries Needed
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import QuantileTransformer
+from scipy.stats import norm, qmc,t 
+from scipy.stats import multivariate_t
+import sobol
+import os
+import matplotlib.pyplot as plt
+
+###User Functions
+from Utilities import *
+from CalculationEngine import *
+
+# - Discount Factor
+os.makedirs('logs',exist_ok=True)
+
+###Configuration Variables
+int_MC_Iterations = 5000
+int_numUnderlying = 5
+str_HistDataPeriod = '5Y'
+flt_recoveryRate = 0.4
+int_bins = 20
+bool_isplot = 1
+bool_runStudentTCalibration = 0
+
+###Importing Data
+import pandas as pd
+pd_dataExcel_creditspread = pd.read_excel('Data/CreditSpreads.xlsx').multiply(1) #Multiply is for Credit Spread Sensitivity Study
+
+pd_data_discountcurve = pd.read_excel('Data/DiscountCurve.xlsx').drop(columns=['Pillars'])
+#print(pd_data_discountcurve)
+
+def discountFactorFunc(t):
+    return np.interp(t,pd_data_discountcurve['Time (YrFrac)'],pd_data_discountcurve['Discount Factor'])
+
+###Massaging Data For use
+pd_underlying = pd_dataExcel_creditspread.columns[1:] #Skipping The First One Because it's Tenor Column
+pd_tenors = pd_dataExcel_creditspread["Tenor (Yrs)"]
+dic_logReturn = getHistLogReturn(pd_underlying,str_HistDataPeriod)
+
+###Graphs : Distribution of Log Return Data
+
+""" fig, ((ax0, ax1), (ax2, ax3),(ax4, ax5)) = plt.subplots(nrows=3, ncols=2)
+
+ax0.hist(dic_logReturn[pd_underlying[0]], bins = int_bins, density=True, histtype='bar')
+ax0.set_title(pd_underlying[0])
+ax1.hist(dic_logReturn[pd_underlying[1]], bins = int_bins, density=True, histtype='bar')
+ax1.set_title(pd_underlying[1])
+ax2.hist(dic_logReturn[pd_underlying[2]], bins = int_bins, density=True, histtype='bar')
+ax2.set_title(pd_underlying[2])
+ax3.hist(dic_logReturn[pd_underlying[3]], bins = int_bins, density=True, histtype='bar')
+ax3.set_title(pd_underlying[3])
+ax4.hist(dic_logReturn[pd_underlying[4]], bins = int_bins, density=True, histtype='bar')
+ax4.set_title(pd_underlying[4])
+
+fig.tight_layout()
+if bool_isplot:
+    plt.show() """
+
+
+####
+
+# create data 
+
+""" 
+###Graph of Credit Spread
+x = pd_tenors
+plt.plot(x, pd_dataExcel_creditspread[pd_underlying[0]], label = pd_underlying[0]) 
+plt.plot(x, pd_dataExcel_creditspread[pd_underlying[1]], label = pd_underlying[1]) 
+plt.plot(x, pd_dataExcel_creditspread[pd_underlying[2]], label = pd_underlying[2]) 
+plt.plot(x, pd_dataExcel_creditspread[pd_underlying[3]], label = pd_underlying[3]) 
+plt.plot(x, pd_dataExcel_creditspread[pd_underlying[4]], label = pd_underlying[4]) 
+plt.title('Credit Spread') 
+plt.legend() 
+
+if bool_isplot:
+    plt.show()
+###
+ """
+
+pd.DataFrame.from_dict(dic_logReturn).to_csv('logs/logreturns.csv',index=False)
+
+
+
+##Step 1 : Bootstrapping CDS Curve 
+
+#Preparing Data to BootstrappingCalculationEngin
+
+dic_survivalProb = {}
+
+for i in pd_underlying:
+    dic_survivalProb[i] = Calculate_SurvivalProbability(
+                                                        pd_tenors,
+                                                        discountFactorFunc(pd_tenors),
+                                                        pd_dataExcel_creditspread[i],
+                                                        recoveryRate=flt_recoveryRate)
+    
+    pd.DataFrame.from_dict(dic_survivalProb[i]).to_csv('logs/'+i+'_bootstrapResult.csv',index=False)
+    
+###Graph of Survival,Default,Hazard
+""" 
+plt.plot(x, dic_survivalProb[pd_underlying[0]]['Survival'], label = pd_underlying[0]) 
+plt.plot(x, dic_survivalProb[pd_underlying[1]]['Survival'], label = pd_underlying[1]) 
+plt.plot(x, dic_survivalProb[pd_underlying[2]]['Survival'], label = pd_underlying[2]) 
+plt.plot(x, dic_survivalProb[pd_underlying[3]]['Survival'], label = pd_underlying[3]) 
+plt.plot(x, dic_survivalProb[pd_underlying[4]]['Survival'], label = pd_underlying[4]) 
+plt.title('Survival Probability')
+plt.legend() 
+
+if bool_isplot:
+    plt.show() """
+
+""" plt.plot(x, dic_survivalProb[pd_underlying[0]]['Default'], label = pd_underlying[0]) 
+plt.plot(x, dic_survivalProb[pd_underlying[1]]['Default'], label = pd_underlying[1]) 
+plt.plot(x, dic_survivalProb[pd_underlying[2]]['Default'], label = pd_underlying[2]) 
+plt.plot(x, dic_survivalProb[pd_underlying[3]]['Default'], label = pd_underlying[3]) 
+plt.title('Default Probability')
+plt.legend() 
+
+if bool_isplot:
+    plt.show() """
+""" 
+plt.step(x, dic_survivalProb[pd_underlying[0]]['Hazard Rate'], label = pd_underlying[0]) 
+plt.step(x, dic_survivalProb[pd_underlying[1]]['Hazard Rate'], label = pd_underlying[1]) 
+plt.step(x, dic_survivalProb[pd_underlying[2]]['Hazard Rate'], label = pd_underlying[2]) 
+plt.step(x, dic_survivalProb[pd_underlying[3]]['Hazard Rate'], label = pd_underlying[3]) 
+plt.step(x, dic_survivalProb[pd_underlying[4]]['Hazard Rate'], label = pd_underlying[4])
+plt.title('Hazard Rate') 
+plt.legend() 
+
+if bool_isplot:
+    plt.show() """
+
+""" 
+fig, ((ax0, ax1,ax2), ( ax3,ax4,ax5)) = plt.subplots(nrows=2, ncols=3)
+
+ax0.step(x, dic_survivalProb[pd_underlying[0]]['Hazard Rate'], label = pd_underlying[0]) 
+ax0.set_title(pd_underlying[0])
+ax1.step(x, dic_survivalProb[pd_underlying[1]]['Hazard Rate'], label = pd_underlying[1]) 
+ax1.set_title(pd_underlying[1])
+ax2.step(x, dic_survivalProb[pd_underlying[2]]['Hazard Rate'], label = pd_underlying[2]) 
+ax2.set_title(pd_underlying[2])
+ax3.step(x, dic_survivalProb[pd_underlying[3]]['Hazard Rate'], label = pd_underlying[3]) 
+ax3.set_title(pd_underlying[3])
+ax4.step(x, dic_survivalProb[pd_underlying[4]]['Hazard Rate'], label = pd_underlying[3]) 
+ax4.set_title(pd_underlying[4])
+fig.tight_layout()
+
+if bool_isplot:
+    plt.show()
+ """
+dic_uniformTransLogReturn = {}
+
+for key,value in dic_logReturn.items():
+    
+    #print('Initial Log Return Data')
+    #print(dic_logReturn[key])
+    
+    dic_uniformTransLogReturn[key] = QuantileTransformer(n_quantiles=100, output_distribution='uniform').fit_transform(np.array(dic_logReturn[key]).reshape(-1,1),y=None) #Just to reshape it into 2D
+    
+    pd.DataFrame.from_dict(dic_uniformTransLogReturn[key]).to_csv('logs/'+key+'_UniformTransform.csv',index=False)
+    
+
+###Graphs : Distribution of Transformed Uniform Data
+
+""" fig, ((ax0, ax1,ax2), ( ax3,ax4,ax5)) = plt.subplots(nrows=2, ncols=3)
+
+ax0.hist(dic_uniformTransLogReturn[pd_underlying[0]], bins = int_bins, density=True, histtype='bar')
+ax0.set_title(pd_underlying[0])
+ax1.hist(dic_uniformTransLogReturn[pd_underlying[1]], bins = int_bins, density=True, histtype='bar')
+ax1.set_title(pd_underlying[1])
+ax2.hist(dic_uniformTransLogReturn[pd_underlying[2]], bins = int_bins, density=True, histtype='bar')
+ax2.set_title(pd_underlying[2])
+ax3.hist(dic_uniformTransLogReturn[pd_underlying[3]], bins = int_bins, density=True, histtype='bar')
+ax3.set_title(pd_underlying[3])
+ax4.hist(dic_uniformTransLogReturn[pd_underlying[4]], bins = int_bins, density=True, histtype='bar')
+ax4.set_title(pd_underlying[4])
+
+fig.tight_layout()
+
+if bool_isplot:
+    plt.show()
+ """
+####
+
+#Student T Degree of Freedom Calibration - Psuedo Uniform Data
+
+mat_pseudoUniformData = pd.DataFrame()
+
+for key,value in dic_uniformTransLogReturn.items():
+    
+    '''
+    For STudent T Degree of Freedom Calibration Later.
+    '''
+
+    mat_pseudoUniformData[key] = pd.DataFrame.from_dict(dic_uniformTransLogReturn[key])
+
+mat_pseudoUniformData.to_csv('logs/MatrixtUniformTransform.csv',index=False)
+
+###########
+
+dic_normalTransLogReturn = {}
+
+for key,value in dic_uniformTransLogReturn.items():
+    
+    norm_data = norm.ppf(dic_uniformTransLogReturn[key])
+    bool_removeInfinite = np.isfinite(norm_data)
+    dic_normalTransLogReturn[key] = norm_data[bool_removeInfinite]
+
+    pd.DataFrame(norm_data).to_csv('logs/'+key+'_InverseCDF_Unitform.csv',index=False)
+    pd.DataFrame.from_dict(dic_normalTransLogReturn[key]).to_csv('logs/'+key+'NormalizedClearn',index=False)
+
+
+###Pseudo Normal Data
+
+""" fig, ((ax0, ax1,ax2), ( ax3,ax4,ax5)) = plt.subplots(nrows=2, ncols=3)
+
+ax0.hist(dic_normalTransLogReturn[pd_underlying[0]], bins = int_bins, density=True, histtype='bar')
+ax0.set_title(pd_underlying[0])
+ax1.hist(dic_normalTransLogReturn[pd_underlying[1]], bins = int_bins, density=True, histtype='bar')
+ax1.set_title(pd_underlying[1])
+ax2.hist(dic_normalTransLogReturn[pd_underlying[2]], bins = int_bins, density=True, histtype='bar')
+ax2.set_title(pd_underlying[2])
+ax3.hist(dic_normalTransLogReturn[pd_underlying[3]], bins = int_bins, density=True, histtype='bar')
+ax3.set_title(pd_underlying[3])
+ax4.hist(dic_normalTransLogReturn[pd_underlying[4]], bins = int_bins, density=True, histtype='bar')
+ax4.set_title(pd_underlying[4])
+
+fig.tight_layout()
+
+if bool_isplot:
+    plt.show()
+
+### """
+
+correlation_shock_factor = 1 #1 by default, if not trying to calculate sensitivity
+
+mat_CorrMatrix_pearson = pd.DataFrame.from_dict(dic_normalTransLogReturn).corr(method='pearson')
+mat_CorrMatrix_kendall = pd.DataFrame.from_dict(dic_normalTransLogReturn).corr(method='kendall')
+
+#For Correlation Sensitivity
+for i in range(0,len(pd_underlying)):
+    for j in range(0,len(pd_underlying)):
+        if i == j:
+            mat_CorrMatrix_pearson.iloc[i,j] = 1
+            mat_CorrMatrix_kendall.iloc[i,j] = 1
+        else:
+            mat_CorrMatrix_pearson.iloc[i,j] = mat_CorrMatrix_pearson.iloc[i,j]*correlation_shock_factor
+            mat_CorrMatrix_kendall.iloc[i,j] = mat_CorrMatrix_pearson.iloc[i,j]*correlation_shock_factor
+
+
+""" #Plotting Correlation Matrix
+#mat_CorrMatrix_pearson.style.background_gradient(cmap='Spectral')
+mat_CorrMatrix_kendall.style.background_gradient(cmap='coolwarm') 
+"""
+
+pd.DataFrame(mat_CorrMatrix_pearson).to_csv('logs/CorrelationMatrixPearson',index = 0)
+pd.DataFrame(mat_CorrMatrix_kendall).to_csv('logs/CorrelationMatrixKendall',index = 0)
+
+print('Matrix is Positive Definite (Pearson) :', is_pos_def(mat_CorrMatrix_pearson))
+
+print('Matrix is Positive Definite (Kendall) :', is_pos_def(mat_CorrMatrix_kendall))
+
+mat_cholesky_pearson = np.linalg.cholesky(mat_CorrMatrix_pearson)
+mat_cholesky_kendall = np.linalg.cholesky(mat_CorrMatrix_kendall)
+
+pd.DataFrame(mat_cholesky_pearson).to_csv('logs/choleskyMatrix',index = 0)
+pd.DataFrame(mat_cholesky_kendall).to_csv('logs/choleskyMatrix',index = 0)
+
+#for student's t random number generation (Distrbution that captures fat tail better)
+#Degree of Freedom - Maximum Likelihood Estimation
+def MLE_LogFunction(df):
+    
+    
+    value = 0
+    for i in range(0,len(mat_pseudoUniformData)):
+        print(mat_pseudoUniformData.iloc[i])
+        value = value + logpdf_t_copula(list(mat_pseudoUniformData.iloc[i]),mu = np.zeros(len(list(mat_pseudoUniformData.iloc[i]))),Sigma=mat_CorrMatrix_kendall,d=5, df = df)
+    return value
+
+#Inconclusive Result, Hence DF taken at 4
+
+
+df_list = list(range(1,25))
+
+MLE_Output = []
+if bool_runStudentTCalibration:
+    for i in range(0,len(df_list)):
+        #print('This is A',i, df_list[i], MLE_LogFunction(df_list[i]))
+        MLE_Output.append(MLE_LogFunction(df_list[i]))
+
+    pd.DataFrame(MLE_Output).to_csv('logs/CalibrationResult',index = 0)
+
+#Random Number Generator
+
+#Gaussian Copula
+M_quasiNormRandNum= norm.ppf(sobol.sample(dimension= int_numUnderlying , n_points = int_MC_Iterations ))
+#M_quasiNormRandNum= np.random.normal(loc=0.0, scale=1.0, size=(int_MC_Iterations,int_numUnderlying))
+
+pd.DataFrame(M_quasiNormRandNum).to_csv('logs/QuasiNormRandom_Uncorrelated_GC',index = 0)
+M_CorrelatedRandNum_Norm_GC = np.dot(mat_cholesky_pearson,M_quasiNormRandNum.T)
+pd.DataFrame(M_CorrelatedRandNum_Norm_GC).to_csv('logs/M_CorrelatedRandNum_Norm_GC_GC',index = 0)
+M_CorrelatedRandNum_Unif_GC = norm.cdf(M_CorrelatedRandNum_Norm_GC)
+pd.DataFrame(M_CorrelatedRandNum_Unif_GC).to_csv('logs/M_CorrelatedRandNum_Unif_GC',index = 0)
+
+
+fig, ((ax0, ax1), (ax2,ax3),(ax4,ax5)) = plt.subplots(nrows=3, ncols=2)
+
+ax0.hist(M_quasiNormRandNum[:,0], bins = int_bins, density=True, histtype='bar')
+ax0.set_title(pd_underlying[0])
+ax1.hist(M_quasiNormRandNum[:,1], bins = int_bins, density=True, histtype='bar')
+ax1.set_title(pd_underlying[1])
+ax2.hist(M_quasiNormRandNum[:,2], bins = int_bins, density=True, histtype='bar')
+ax2.set_title(pd_underlying[2])
+ax3.hist(M_quasiNormRandNum[:,3], bins = int_bins, density=True, histtype='bar')
+ax3.set_title(pd_underlying[3])
+ax4.hist(M_quasiNormRandNum[:,4], bins = int_bins, density=True, histtype='bar')
+ax4.set_title(pd_underlying[4])
+
+fig.tight_layout()
+if bool_isplot:
+    plt.show()
+
+
+fig, ((ax0, ax1), (ax2,ax3),(ax4,ax5)) = plt.subplots(nrows=3, ncols=2)
+
+ax0.hist(M_CorrelatedRandNum_Norm_GC[0,:], bins = int_bins, density=True, histtype='bar')
+ax0.set_title(pd_underlying[0])
+ax1.hist(M_CorrelatedRandNum_Norm_GC[1,:], bins = int_bins, density=True, histtype='bar')
+ax1.set_title(pd_underlying[1])
+ax2.hist(M_CorrelatedRandNum_Norm_GC[2,:], bins = int_bins, density=True, histtype='bar')
+ax2.set_title(pd_underlying[2])
+ax3.hist(M_CorrelatedRandNum_Norm_GC[3,:], bins = int_bins, density=True, histtype='bar')
+ax3.set_title(pd_underlying[3])
+ax4.hist(M_CorrelatedRandNum_Norm_GC[4,:], bins = int_bins, density=True, histtype='bar')
+ax4.set_title(pd_underlying[4])
+
+fig.tight_layout()
+if bool_isplot:
+    plt.show()
+
+fig, ((ax0, ax1), (ax2,ax3),(ax4,ax5)) = plt.subplots(nrows=3, ncols=2)
+
+ax0.hist(M_CorrelatedRandNum_Unif_GC[0,:], bins = int_bins, density=True, histtype='bar')
+ax0.set_title(pd_underlying[0])
+ax1.hist(M_CorrelatedRandNum_Unif_GC[1,:], bins = int_bins, density=True, histtype='bar')
+ax1.set_title(pd_underlying[1])
+ax2.hist(M_CorrelatedRandNum_Unif_GC[2,:], bins = int_bins, density=True, histtype='bar')
+ax2.set_title(pd_underlying[2])
+ax3.hist(M_CorrelatedRandNum_Unif_GC[3,:], bins = int_bins, density=True, histtype='bar')
+ax3.set_title(pd_underlying[3])
+ax4.hist(M_CorrelatedRandNum_Unif_GC[4,:], bins = int_bins, density=True, histtype='bar')
+ax4.set_title(pd_underlying[4])
+
+fig.tight_layout()
+if bool_isplot:
+    plt.show()
+
+
+###For Student T Copula
+
+int_DOF_TC = 4
+
+def calculateTFactor(df):
+   
+    rv_for_s = np.random.normal(0, 1, size = (df,int_MC_Iterations))
+    s = np.sum(np.square(rv_for_s),axis = 0)
+    t_factor = np.sqrt(df/s)
+    return t_factor
+
+t_factor_vector = calculateTFactor(int_DOF_TC)
+M_CorrelatedRandNum_TStudent_TC = np.dot(mat_cholesky_kendall,M_quasiNormRandNum.T)
+pd.DataFrame(M_CorrelatedRandNum_TStudent_TC).to_csv('logs/M_CorrelatedRandNum_TStudent_TC',index = 0)
+
+M_CorrelatedRandNum_TStudent_TC_Scaled = M_CorrelatedRandNum_TStudent_TC
+
+for i in range(0,int_MC_Iterations):
+    for j in range(0,5):
+        M_CorrelatedRandNum_TStudent_TC_Scaled[j][i] = M_CorrelatedRandNum_TStudent_TC[j][i] * t_factor_vector[i]
+    
+pd.DataFrame(M_CorrelatedRandNum_TStudent_TC_Scaled).to_csv('logs/M_CorrelatedRandNum_TStudent_TC_Scaled',index = 0)
+
+M_CorrelatedRandNum_Unif_TC = t.cdf(M_CorrelatedRandNum_TStudent_TC_Scaled, df = int_DOF_TC)
+
+
+#Changed from U to default time. 
+M_CumulatedHazardTime_GC = np.abs(np.log(1- M_CorrelatedRandNum_Unif_GC))
+#print(M_CumulatedHazardTime_GC)
+pd.DataFrame(M_CumulatedHazardTime_GC).to_csv('logs/CumulatedHazardRate_GC',index = 0)
+M_CumulatedHazardTime_TC = np.abs(np.log(1- M_CorrelatedRandNum_Unif_TC))
+#print(M_CumulatedHazardTime_TC)
+pd.DataFrame(M_CumulatedHazardTime_TC).to_csv('logs/CumulatedHazardRate_TC',index = 0)
+
+
+dic_HazardRate_cumSum = {}
+
+for  key,value in dic_survivalProb.items():
+    dic_HazardRate_cumSum[key] = np.cumsum(dic_survivalProb[key]['Hazard Rate'])
+
+
+dic_DefaultTime_GC = {}
+dic_DefaultTime_TC = {}
+iter = 0
+
+for key,value in dic_HazardRate_cumSum.items():
+
+    dic_DefaultTime_GC[key] = get_timeToDefault(M_CumulatedHazardTime_GC[iter],dic_HazardRate_cumSum[key])
+    dic_DefaultTime_TC[key] = get_timeToDefault(M_CumulatedHazardTime_TC[iter],dic_HazardRate_cumSum[key])
+    iter = iter + 1
+
+
+
+mat_correlatedTimeToDefault_GC = np.zeros([int_numUnderlying,int_MC_Iterations])
+mat_correlatedTimeToDefault_TC = np.zeros([int_numUnderlying,int_MC_Iterations])
+i = 0
+
+for key,value in dic_DefaultTime_GC.items():
+    
+    mat_correlatedTimeToDefault_GC[i:] = dic_DefaultTime_GC[key]
+    mat_correlatedTimeToDefault_TC[i:] = dic_DefaultTime_TC[key]
+    i = i+ 1
+
+mat_correlatedTimeToDefault_GC = mat_correlatedTimeToDefault_GC.transpose() #So that rows are the simulations
+mat_correlatedTimeToDefault_TC = mat_correlatedTimeToDefault_TC.transpose()
+
+BasketCredit_1_GC = Calculate_kthtodefault(discountFactorFunc,np.sort(mat_correlatedTimeToDefault_GC),flt_recoveryRate,K = 1)[0]
+BasketCredit_2_GC = Calculate_kthtodefault(discountFactorFunc,np.sort(mat_correlatedTimeToDefault_GC),flt_recoveryRate,K = 2)[0]
+BasketCredit_3_GC = Calculate_kthtodefault(discountFactorFunc,np.sort(mat_correlatedTimeToDefault_GC),flt_recoveryRate,K = 3)[0]
+BasketCredit_4_GC = Calculate_kthtodefault(discountFactorFunc,np.sort(mat_correlatedTimeToDefault_GC),flt_recoveryRate,K = 4)[0]
+BasketCredit_5_GC = Calculate_kthtodefault(discountFactorFunc,np.sort(mat_correlatedTimeToDefault_GC),flt_recoveryRate,K = 5)[0]
+
+BasketCredit_1_TC = Calculate_kthtodefault(discountFactorFunc,np.sort(mat_correlatedTimeToDefault_TC),flt_recoveryRate,K = 1)[0]
+BasketCredit_2_TC = Calculate_kthtodefault(discountFactorFunc,np.sort(mat_correlatedTimeToDefault_TC),flt_recoveryRate,K = 2)[0]
+BasketCredit_3_TC = Calculate_kthtodefault(discountFactorFunc,np.sort(mat_correlatedTimeToDefault_TC),flt_recoveryRate,K = 3)[0]
+BasketCredit_4_TC = Calculate_kthtodefault(discountFactorFunc,np.sort(mat_correlatedTimeToDefault_TC),flt_recoveryRate,K = 4)[0]
+BasketCredit_5_TC = Calculate_kthtodefault(discountFactorFunc,np.sort(mat_correlatedTimeToDefault_TC),flt_recoveryRate,K = 5)[0]
+
+
+print(BasketCredit_1_GC  * 10000,BasketCredit_2_GC  * 10000,BasketCredit_3_GC * 10000,BasketCredit_4_GC  * 10000,BasketCredit_5_GC * 10000)
+print(BasketCredit_1_TC  * 10000,BasketCredit_2_TC  * 10000,BasketCredit_3_TC * 10000,BasketCredit_4_TC  * 10000,BasketCredit_5_TC * 10000)
+
+
+#Results
+
+#Convergence Analysis
+
+#100000 Iterations
+#39.066803908217935 7.335182673367293 1.4781570348249307 0.2552293714874189 0.030265763454379306
+#36.25346043964968 8.342236390386732 2.254029594750736 0.5835838717081377 0.10680716057792557
+
+#10000 Iterations
+#39.21781231721393 7.592646409575981 1.3968447989538024 0.2082582334772198 0.023061346418755423
+#36.05855868319458 8.021399021543022 2.235121439503349 0.5742482838940061 0.1204899657387773
+
+#5000 Iterations
+#39.70168749369978 7.475723547165259 1.3039801490270426 0.09220571354742588 0.0
+#37.27041724571839 10.188162491247194 3.2433099563968018 1.0454437243460224 0.1416439044326882
+
+#1000 Iterations
+#42.64081335728808 5.621768034299688 0.4602126304857003 0.0 0.0
+#40.77372000165343 9.754507360970212 2.193754775567376 1.2004088070151018 0.23148623700549983
+
+#100 Iterations
+#31.644701568834886 2.2965405218847628 0.0 0.0 0.0
+#27.30218033682175 2.2965405218847628 0.0 0.0 0.0
+
+#Random Number Analysis
+#100 Iterations
+#32.03623669666962 2.446198539527551 2.298971733106419 0.0 0.0
+#28.982294145357052 6.996488972253099 2.3034940448875134 0.0 0.0
+
+#1000 Iterations
+#34.92197240223003 5.051293881704407 1.9389153970897683 0.49035107799678085 0.0
+#32.63128916195013 7.430657959026092 1.4363956136920346 0.4616605171153748 0.0
+
+#5000
+#39.873610648173205 7.982846602966878 1.8396870459892054 0.5120427176630846 0.0
+#33.928083848100734 8.32261072543268 3.0645929952482835 1.2939412807890223 0.2410639349077763
+
+#10000
+#38.58929544569909 6.150707673326594 1.2668684008179356 0.2570224254839229 0.023746132959116085
+#34.660569614683105 8.596221926576579 2.422162541055299 1.0492619424575473 0.23900213466576203
+
+#100000
+#38.971583746470685 7.307006698677325 1.4580848640434831 0.2796693386711098 0.03977229893350575
+#34.52008304858074 8.995202297011206 2.93352584785089 0.9585178944377426 0.20416716506324986
+
+
+#Recovery Rate Analysis
+#Using 10000 Iterations
+
+#10000 Iterations, RR = 0.2
+#40.25249316457708 7.3518071485903045 0.9275435627214457 0.09301673324909356 0.0
+#37.00732643439768 8.493368876568665 2.426569033220123 0.8580968265396113 0.1287562885999777
+
+#10000 Iterations, RR = 0.3
+#39.66275243488498 7.389744022507021 1.1389361807463427 0.108323197550161 0.0
+#36.95610986835635 8.107567104494017 2.229730620008596 0.6737492373936171 0.08499019384428229
+
+#10000 Iterations, RR = 0.4
+#39.21781231721393 7.592646409575981 1.3968447989538024 0.2082582334772198 0.023061346418755423
+#36.05855868319458 8.021399021543022 2.235121439503349 0.5742482838940061 0.1204899657387773
+
+#10000 Iterations, RR = 0.5
+#38.634388287716014 7.720405065303201 1.5806419782919088 0.34828243656788094 0.019249746208860656
+#36.19175244135945 8.120800467657988 2.3306286773586318 0.6190721412607484 0.11981861925352345
+
+#10000 Iterations, RR = 0.6
+#37.96491195701343 8.401119027139416 1.7442209269059168 0.42025131104219554 0.015911599337244862
+#36.52531246385601 8.87181881361316 2.499721647037254 0.6528251690797884 0.10873108932533372
+
+#Market Credit Spread Sensitivity Analysis
+
+#10000 Iterations, RR = 0.4, Shock Factor = 0.8
+#25.82710334766375 4.164219912947299 0.3930736241586272 0.02299649270945417 0.0
+#23.303388219825415 4.908770417249149 1.4907087345425456 0.5731256873788642 0.06982883639603187
+
+#10000 Iterations, RR = 0.4, Shock Factor = 0.9
+#32.13617309562176 5.97843317465324 0.8132995117188684 0.06979422424823718 0.0
+#30.193801945614453 6.805353198835659 1.6737869973424464 0.4042804516289851 0.02306564472854025
+
+#10000 Iterations, RR = 0.4, Shock Factor = 1
+#39.21781231721393 7.592646409575981 1.3968447989538024 0.2082582334772198 0.023061346418755423
+#36.05855868319458 8.021399021543022 2.235121439503349 0.5742482838940061 0.1204899657387773
+
+#10000 Iterations, RR = 0.4, Shock Factor = 1.1
+#46.69892421306612 9.48399646699697 1.8971034894414143 0.4180122879362106 0.02310375014169962
+#44.35004199210539 10.585516339848473 2.8023288796547687 0.8350218325009461 0.09467762522698045
+
+#10000 Iterations, RR = 0.4, Shock Factor = 1.2
+#55.38530266553871 11.846645096635859 2.4257383112458215 0.6054331914188458 0.023853074389390445
+#53.242331835465464 12.666033837596292 3.6030232059518026 0.8200178160739324 0.16726326830694463
+
+#Correlation Sensitivity Analysis
+
+#10000 Iterations, RR = 0.4, Shock Factor = 0.8
+#41.12510502257508 6.68660265091662 0.8806277196634025 0.06982345596277532 0.0
+#37.20884533198949 7.8036670625017415 1.9663600642392003 0.3525802506735177 0.047580141494953834
+
+#10000 Iterations, RR = 0.4, Shock Factor = 0.9
+#40.11840944505824 7.245445764422288 1.139794384728675 0.11596894826218615 0.02305314254067245
+#34.80827189525485 8.107444232532599 2.217527712990704 0.40979522357459597 0.02451357586064186
+
+#10000 Iterations, RR = 0.4, Shock Factor = 1
+#39.21781231721393 7.592646409575981 1.3968447989538024 0.2082582334772198 0.023061346418755423
+#36.05855868319458 8.021399021543022 2.235121439503349 0.5742482838940061 0.1204899657387773
+
+#10000 Iterations, RR = 0.4, Shock Factor = 1.1
+#38.34243934614717 7.99517851043892 1.7510888559759057 0.30066729258909847 0.02307359763633179
+#32.767804937057186 9.360280293742777 3.103409746224297 1.1421580842627967 0.18923189085397651
+
+#10000 Iterations, RR = 0.4, Shock Factor = 1.2
+#37.37611553863073 8.44737086114604 1.8956193179539205 0.5107097187090428 0.02308500457249917
+#31.50725122342315 9.590752817693115 3.8284762658085576 1.8477268513442595 0.48685104935634615
+
+
